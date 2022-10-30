@@ -162,13 +162,23 @@ def main(args):
     srcpad.link(sinkpad)
 
 
+    # Queue 1
+    queue_1 = create_gst_element("queue", "first-queue")
+    pipeline.add(queue_1)
+    streammux.link(queue_1)
+
     # Detection
     ai_model = create_gst_element("nvinfer", "first-detector")
     ai_model.set_property("config-file-path", "/edge-appliance/resources/models/XfWWqUAnlwFbVxZFEtgkSss8XT86l5v8FScBjVviYY2SA8rQ1rJvcZMSFEGk/config.txt")
     # ai_model.set_property('config-file-path', "/opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/config_infer_primary.txt")
     # ai_model.set_property("batch-size", 1)
     pipeline.add(ai_model)
-    streammux.link(ai_model)
+    queue_1.link(ai_model)
+
+    # Queue 2
+    queue_2 = create_gst_element("queue2", "second-queue")
+    pipeline.add(queue_2)
+    ai_model.link(queue_2)
 
     # Tracker
     logger.info(f"[Media Server] - Tracker 1280x720")
@@ -176,15 +186,19 @@ def main(args):
     tracker.set_property('tracker-width', 640)
     tracker.set_property('tracker-height', 384)
     tracker.set_property('ll-lib-file', "/opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so")
-    tracker.set_property('ll-config-file', "/home/streamit/streamit-edge-appliance/resources/config/nvds-tracker.yml")
+    tracker.set_property('ll-config-file', "/edge-appliance/resources/config/nvds-tracker.yml")
     # tracker.set_property('gpu-id', 0)
     # tracker.set_property('display-tracking-id', True)
     # tracker.set_property('compute-hw', 2) 
     # tracker.set_property('enable-past-frame', 1)
     # tracker.set_property('enable-batch-process', 1)
     pipeline.add(tracker)
-    ai_model.link(tracker)
+    queue_2.link(tracker)
 
+    # Queue 3
+    queue_3 = create_gst_element("queue", "third-queue")
+    pipeline.add(queue_3)
+    tracker.link(queue_3)
 
     # Analytics Converter
     # analytics_convertor_caps = create_gst_element("capsfilter", "analytics-convertor-caps")
@@ -194,9 +208,14 @@ def main(args):
 
     # Analitics 
     analytics = create_gst_element("nvdsanalytics", "analytics")
-    analytics.set_property("config-file", "/home/streamit/streamit-edge-appliance/resources/config/nvds-analytics.txt")
+    analytics.set_property("config-file", "/edge-appliance/resources/config/nvds-analytics.txt")
     pipeline.add(analytics)
-    tracker.link(analytics)
+    queue_3.link(analytics)
+
+    # Queue 4
+    queue_4 = create_gst_element("queue", "fourth-queue")
+    pipeline.add(queue_4)
+    analytics.link(queue_4)
 
     # Tiler
     tiler = create_gst_element("nvmultistreamtiler", "nvtiler")
@@ -205,12 +224,22 @@ def main(args):
     tiler.set_property('width', 1280)
     tiler.set_property('height', 720)
     pipeline.add(tiler)
-    analytics.link(tiler)
+    queue_4.link(tiler)
+
+    # Queue 5
+    queue_5 = create_gst_element("queue", "fifth-queue")
+    pipeline.add(queue_5)
+    tiler.link(queue_5)
 
     # OSD Converter
     display_convertor = create_gst_element("nvvideoconvert", "display-converter")
     pipeline.add(display_convertor)
-    tiler.link(display_convertor)
+    queue_5.link(display_convertor)
+
+    # Queue 6
+    queue_6 = create_gst_element("queue", "sixth-queue")
+    pipeline.add(queue_6)
+    display_convertor.link(queue_6)
 
     # Nvosd
     display_nvosd = create_gst_element("nvdsosd", "display-nvosd")
@@ -225,28 +254,38 @@ def main(args):
     display_nvosd.set_property('x-clock-offset', 10)
     display_nvosd.set_property('y-clock-offset', 5)
     display_nvosd.set_property('clock-color', 0xff0000ff)
-    display_convertor.link(display_nvosd)
+    queue_6.link(display_nvosd)
 
+
+    # Queue 7
+    queue_7 = create_gst_element("queue", "seventh-queue")
+    pipeline.add(queue_7)
+    display_nvosd.link(queue_7)
 
     # If the app is running on production we don't show the display
-    display_sink = create_gst_element("fpsdisplaysink", "display-tiler-sink")
-    display_sink.set_property("sync", False)
-    display_sink.set_property("video-sink", "fakesink")
-    display_sink.set_property("text-overlay", False)
-    pipeline.add(display_sink)
-    display_nvosd.link(display_sink)
-
-    # # Transform
-    # display_transform = create_gst_element("nvegltransform", "display-transform")
-    # pipeline.add(display_transform)
-    # display_nvosd.link(display_transform)
-    
-    # # Sink
-    # display_sink = create_gst_element("nveglglessink", "display-tiler-sink")
-    # display_sink.set_property("qos", True)
+    # display_sink = create_gst_element("fpsdisplaysink", "display-tiler-sink")
     # display_sink.set_property("sync", False)
+    # display_sink.set_property("video-sink", "fakesink")
+    # display_sink.set_property("text-overlay", False)
     # pipeline.add(display_sink)
-    # display_transform.link(display_sink)
+    # queue_7.link(display_sink)
+
+    # Transform
+    display_transform = create_gst_element("nvegltransform", "display-transform")
+    pipeline.add(display_transform)
+    queue_7.link(display_transform)
+    
+    # Queue 9
+    queue_9 = create_gst_element("queue", "nineth-queue")
+    pipeline.add(queue_9)
+    display_transform.link(queue_9)
+
+    # Sink
+    display_sink = create_gst_element("nveglglessink", "display-tiler-sink")
+    display_sink.set_property("qos", True)
+    display_sink.set_property("sync", False)
+    pipeline.add(display_sink)
+    queue_9.link(display_sink)
         
 
     # Link Probe to analitycs
